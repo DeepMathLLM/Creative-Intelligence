@@ -121,3 +121,26 @@ python -m unittest discover -s tests -p "test_*.py" -v
 ```
 
 These tests cover runner-owned deterministic behavior such as queue validation, immutable queue state, format-placeholder checks, verifier-output integrity, archive overwrite protection, and provider preflight logic. They do **not** simulate Moonshine agent execution, session storage, MCP tools, or real verification-provider behavior; those remain runtime integration concerns.
+
+## Reference verification
+
+`tools/verify_references.py` adds a deterministic layer underneath the model-based acceptance gate: it checks every numbered source in an archive's `Sources` section before any model review is involved. The goal is to catch fabricated or miscopied references — the failure mode a model reviewer cannot reliably detect, because a hallucinated citation still *looks* plausible.
+
+Checks performed, per archive:
+
+- **Structure (offline):** contiguous `[n]` numbering, and every in-text citation `[n]` resolving to a listed source (uncited entries are warnings, not failures).
+- **Existence:** each source is resolved against external bibliographic indexes — Crossref (by DOI or scored bibliographic query), OpenAlex, zbMATH Open, the Internet Archive, and Open Library. A confident match requires title similarity **and** surname overlap **and** a publication year within ±2, so a real paper with fabricated authors (or vice versa) does not pass. zbMATH Open and the Internet Archive extend coverage to the 19th-century literature that origin archives frequently cite.
+- **Link liveness:** DOIs and URLs must resolve (warnings by default; `--strict` escalates).
+- **Consistency:** bibliographic details claimed in the entry (year, volume, pages) are compared with the matched records. Claims contradicted by every matched record are failures; disagreement between the indexes themselves (e.g., first-page variants) is reported as a warning.
+
+The tool is deterministic and offline-testable: all network access goes through a JSON cache (`--cache-file`, default `.reference-cache.json`), and `--offline` restricts it to that cache, which is how the regression tests in `tests/test_verify_references.py` run — their fixtures are recorded responses from the five indexes.
+
+```bash
+python tools/verify_references.py path/to/archive.md            # human-readable report
+python tools/verify_references.py path/to/archive.md --json     # machine-readable report
+python tools/verify_references.py a.md b.md --offline           # CI-friendly, cache-only
+```
+
+Exit codes: `0` = all sources verified, `1` = at least one failure, `2` = usage or file error.
+
+The tool never judges whether a source *supports* a historical claim — claim-level support remains the responsibility of the model review in `verify_math_object_origin_archive`.
