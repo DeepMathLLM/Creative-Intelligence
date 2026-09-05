@@ -1,0 +1,45 @@
+name: Moonshine runtime integration tests
+
+on:
+  push:
+    paths:
+      - "run_archive.py"
+      - "archive-format-specification.md"
+      - "skills/**"
+      - "tests/integration_run_archive_moonshine.py"
+      - ".github/workflows/moonshine-integration-tests.yml"
+  pull_request:
+    paths:
+      - "run_archive.py"
+      - "archive-format-specification.md"
+      - "skills/**"
+      - "tests/integration_run_archive_moonshine.py"
+      - ".github/workflows/moonshine-integration-tests.yml"
+
+permissions:
+  contents: read
+
+env:
+  MOONSHINE_COMMIT: 72a64f8984e0e7e1b0a50f6e53e4d00e4fffbb7d
+
+jobs:
+  moonshine-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Check out Creative-Intelligence
+        uses: actions/checkout@v7
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Install pinned Moonshine runtime
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install --no-deps "git+https://github.com/DeepMathLLM/Moonshine.git@${MOONSHINE_COMMIT}"
+
+      - name: Run deterministic Moonshine integration tests
+        run: python -m unittest -v tests.integration_run_archive_moonshine

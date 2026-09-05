@@ -857,13 +857,22 @@ def _render_material_paths(staged: Sequence[Dict[str, object]]) -> str:
 def _open_or_create_session(app: MoonshineApp, object_job: ObjectJob, item_state: Dict[str, object]) -> ShellState:
     session_id = str(item_state.get("session_id") or "").strip()
     if session_id:
-        shell_state = app.start_shell_state(session_id=session_id)
-        if shell_state.project_slug != object_job.project_slug:
-            raise RunnerError(
-                "session %s belongs to project %s, expected %s"
-                % (session_id, shell_state.project_slug, object_job.project_slug)
+        try:
+            return app.start_shell_state(
+                session_id=session_id,
+                mode="chat",
+                project_slug=object_job.project_slug,
+                agent_slug=AGENT_SLUG,
             )
-        return shell_state
+        except ValueError as exc:
+            session_meta = app.session_store.get_session_meta(session_id) or {}
+            actual_project = str(session_meta.get("project_slug") or "")
+            if actual_project and actual_project != object_job.project_slug:
+                raise RunnerError(
+                    "session %s belongs to project %s, expected %s"
+                    % (session_id, actual_project, object_job.project_slug)
+                ) from exc
+            raise RunnerError("session %s is incompatible with archive runner: %s" % (session_id, exc)) from exc
     return app.start_shell_state(
         mode="chat",
         project_slug=object_job.project_slug,
