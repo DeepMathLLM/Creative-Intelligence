@@ -35,9 +35,10 @@ ARCHIVE_TEXT = """# Mathematical Object Origin Archive | Integration Test Object
 
 This object is a deterministic integration-test fixture.
 
-### Background
+### Mathematical Context and Formation
 
-The fixture exists only to test the research-agent runtime boundary [1].
+The fixture represents a controlled object whose motivating problem is to
+exercise the archive runtime boundary deterministically [1].
 
 ### Essential Role
 
@@ -51,8 +52,6 @@ No mathematical claim beyond the fixture contract is intended.
 
 [1] Creative-Intelligence deterministic integration fixture.
 """
-
-HISTORICAL_EVIDENCE = "[1] The archive is an explicit deterministic test fixture; no external historical claim is asserted."
 
 PASS_REVIEW = {
     "mathematical": {
@@ -78,9 +77,8 @@ PASS_REVIEW = {
 class ScriptedArchiveProvider(object):
     """Issue the verifier tool call once, then return a normal final answer."""
 
-    def __init__(self, archive=ARCHIVE_TEXT, evidence=HISTORICAL_EVIDENCE):
+    def __init__(self, archive=ARCHIVE_TEXT):
         self.archive = archive
-        self.evidence = evidence
         self.calls = []
         self.tool_call_issued = False
 
@@ -101,7 +99,6 @@ class ScriptedArchiveProvider(object):
                         name=run_archive.VERIFICATION_TOOL,
                         arguments={
                             "archive": self.archive,
-                            "historical_evidence": self.evidence,
                         },
                         call_id="verify-archive-1",
                     )
@@ -110,7 +107,7 @@ class ScriptedArchiveProvider(object):
             yield ProviderStreamEvent(type="response", response=response)
             return
 
-        response = ProviderResponse(content="The archive verification was submitted.")
+        response = ProviderResponse(content="ARCHIVE_COMPLETE")
         yield ProviderStreamEvent(type="text_delta", text=response.content)
         yield ProviderStreamEvent(type="response", response=response)
 
@@ -174,6 +171,9 @@ class MoonshineRunnerIntegrationTestCase(unittest.TestCase):
             language="en",
             objects=(object_job,),
             state_path=self.root / "runs" / "queue.state.json",
+            mode="queue",
+            branches=(),
+            target_archives=1,
         )
         state = run_archive._new_state(job)
         run_archive.save_state(job, state)
@@ -192,7 +192,7 @@ class MoonshineRunnerIntegrationTestCase(unittest.TestCase):
         app.context_manager.provider = main_provider
         app.memory.set_provider(main_provider)
         app.research_project_resolver.provider = main_provider
-        run_archive.configure_task_exposure(app)
+        run_archive.configure_task_exposure(app, include_live_search=False)
         return app, main_provider, verification_provider
 
     def _process(self, app, job, state, object_job, item_state):
@@ -325,6 +325,47 @@ class MoonshineRunnerIntegrationTestCase(unittest.TestCase):
         self.assertEqual(meta.get("mode"), "chat")
         self.assertEqual(meta.get("agent_slug"), "research-control-loop")
         self.assertEqual(meta.get("project_slug"), object_job.project_slug)
+
+    def test_discovery_resume_rejects_session_with_wrong_agent(self):
+        app = MoonshineApp(home=str(self.root / "moonshine-home"))
+        job = run_archive.build_discovery_job(
+            ["Differential Geometry", "Functional Analysis"],
+            target_archives=2,
+            run_name="integration-discovery",
+        )
+        project_slug = run_archive._discovery_project_slug(job, 1)
+        wrong_state = app.start_shell_state(
+            mode="chat",
+            project_slug=project_slug,
+            agent_slug="research-control-loop",
+        )
+
+        with self.assertRaisesRegex(
+            run_archive.RunnerError,
+            "agent=research-control-loop, not %s" % run_archive.AGENT_SLUG,
+        ):
+            run_archive._resume_archive_session(app, wrong_state.session_id, project_slug)
+
+        meta = app.session_store.get_session_meta(wrong_state.session_id)
+        self.assertEqual(meta.get("agent_slug"), "research-control-loop")
+        self.assertEqual(meta.get("project_slug"), project_slug)
+
+    def test_resume_rejects_incomplete_session_identity(self):
+        _, _, object_job, item_state = self._job()
+        app = MoonshineApp(home=str(self.root / "moonshine-home"))
+        incomplete_state = app.start_shell_state(
+            mode="chat",
+            project_slug=object_job.project_slug,
+            agent_slug=run_archive.AGENT_SLUG,
+        )
+        app.session_store.update_session_meta(incomplete_state.session_id, agent_slug="")
+        item_state["session_id"] = incomplete_state.session_id
+
+        with self.assertRaisesRegex(
+            run_archive.RunnerError,
+            "lacks required runtime identity fields: agent_slug",
+        ):
+            run_archive._open_or_create_session(app, object_job, item_state)
 
 
 if __name__ == "__main__":

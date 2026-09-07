@@ -17,7 +17,7 @@
 
 {Content}
 
-### Background
+### Mathematical Context and Formation
 
 {Content}
 
@@ -27,7 +27,7 @@
 
 ## 3. Notes
 
-{Relevant precursors, historical disputes, related objects, or other supplementary information.}
+{Related objects, terminology distinctions, limitations, or other supplementary information.}
 
 ## 4. Sources
 
@@ -38,14 +38,18 @@
 
 ## Writing Instructions
 
-1. Each archive must document exactly one mathematical object.
+1. Each archive must document exactly one mathematical object that arose in response to a concrete mathematical problem or a well-defined class of problems.
 
-2. “Archive Information,” “Core Record,” and “Sources” are required sections. “Notes” is optional.
+2. “Archive Information” and “Core Record” are required sections. “Notes” and “Sources” are optional.
 
-3. The Core Record must contain the three fixed subsections “Precise Description,” “Background,” and “Essential Role.” “Precise Description” states the object accurately in mathematical terms. “Background” explains the setting from which it arose.
+3. The Core Record must contain the three fixed subsections “Precise Description,” “Mathematical Context and Formation,” and “Essential Role.” “Precise Description” states the object accurately in mathematical terms.
 
-4. Cite important historical claims with numbered references such as `[1]` and `[2]`. State uncertainty explicitly when the evidence is limited or disputed.
+4. “Mathematical Context and Formation” presents a clear and coherent account of the concrete mathematical problem, or well-defined class of problems, that motivated the object. It explains where the mathematical difficulty lay, why the available concepts or methods were inadequate, and which ideas or insights led to the object’s formation. These elements must be connected through their mathematical relationships rather than listed as separate facts, while their emphasis and order depend on the object. The archive concerns mathematical meaning and formation, not a historical story.
 
-5. Distinguish mathematical facts, documented historical facts, and interpretive synthesis. Maintain a professional and objective tone.
+5. “Essential Role” explains precisely which part of the motivating problem the object made tractable, which difficulties it overcame, bypassed, or reformulated, and how specific features of its definition or structure did so. It should distinguish this direct contribution from generic importance or later applications, while also explaining any deeper understanding or structural viewpoint the object introduced.
 
-6. Write mathematical symbols and formulas in LaTeX.
+6. If the archive refers to any material, include “Sources” and list that material there. Use numbered citations such as `[1]` and `[2]` consistently.
+
+7. Distinguish established mathematical facts from interpretive synthesis. State uncertainty explicitly when a claim is uncertain or disputed. Maintain a professional and objective tone.
+
+8. Write mathematical symbols and formulas in LaTeX.
