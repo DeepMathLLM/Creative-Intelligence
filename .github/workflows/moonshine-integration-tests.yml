@@ -20,7 +20,7 @@ permissions:
   contents: read
 
 env:
-  MOONSHINE_COMMIT: 72a64f8984e0e7e1b0a50f6e53e4d00e4fffbb7d
+  MOONSHINE_COMMIT: bb0e4aa025fdcc5297fff1025ab4876f120ed615
 
 jobs:
   moonshine-integration:

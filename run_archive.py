@@ -43,6 +43,7 @@ DISCOVERY_STOP_PREFIX = "ARCHIVE_DISCOVERY_STOP:"
 AGENT_SLUG = "moonshine-core"
 STATE_SCHEMA_VERSION = 1
 SOURCE_CONTEXT_TOKEN_BUDGET = 60_000
+DISCOVERY_ROW_STATUSES = {"selecting", "proposed", "running", "verified", "failed", "stopped"}
 
 BASE_EXPOSED_TOOLS = [
     "load_skill_definition",
@@ -278,6 +279,20 @@ def _validate_material_fingerprints(object_job: ObjectJob, row: Dict[str, object
             raise RunnerError("state material association is inconsistent for %s" % object_job.name)
         if str(stored_item.get("sha256") or "") != expected_item["sha256"]:
             raise RunnerError("material content changed after this run started: %s" % expected_item["path"])
+
+
+def _validate_discovery_verified_archive(name: str, archive: str, expected_hash: str) -> None:
+    """Reject a verified discovery row whose published artifact is not intact."""
+    path = Path(str(archive or ""))
+    digest = str(expected_hash or "").strip()
+    if not archive or not digest or not path.exists() or not path.is_file():
+        raise RunnerError("verified discovery state has no intact archive for %s" % name)
+    try:
+        current_hash = _sha256_text(path.read_text(encoding="utf-8").strip())
+    except (OSError, UnicodeDecodeError) as exc:
+        raise RunnerError("verified discovery archive cannot be read: %s (%s)" % (path, exc)) from exc
+    if current_hash != digest:
+        raise RunnerError("verified discovery archive changed on disk: %s" % path)
 
 
 def _dedupe(items: Iterable[object]) -> List[str]:
@@ -594,9 +609,13 @@ def load_or_create_state(job: JobFile) -> Dict[str, object]:
         ]
         if list(state.get("concept_references") or []) != expected_references:
             raise RunnerError("state concept references do not match the discovery input")
+        seen_discovery_names = set()
         for expected_index, row in enumerate(rows, start=1):
             if not isinstance(row, dict) or int(row.get("index") or 0) != expected_index:
                 raise RunnerError("discovery state contains an invalid object record")
+            status = str(row.get("status") or "")
+            if status not in DISCOVERY_ROW_STATUSES:
+                raise RunnerError("unknown discovery state status '%s'" % status)
             if str(row.get("project_slug") or "") != _discovery_project_slug(job, expected_index):
                 raise RunnerError("discovery state project association is inconsistent")
             if not str(row.get("session_id") or ""):
@@ -604,6 +623,10 @@ def load_or_create_state(job: JobFile) -> Dict[str, object]:
             name = str(row.get("name") or "").strip()
             archive = str(row.get("archive") or "").strip()
             if name:
+                normalized_name = name.casefold()
+                if normalized_name in seen_discovery_names:
+                    raise RunnerError("duplicate discovery object name: %s" % name)
+                seen_discovery_names.add(normalized_name)
                 branch = str(row.get("branch") or "").strip()
                 if branch not in job.branches:
                     raise RunnerError("discovery state contains an invalid branch for %s" % name)
@@ -621,8 +644,16 @@ def load_or_create_state(job: JobFile) -> Dict[str, object]:
                 )
                 if archive != expected_archive:
                     raise RunnerError("state archive association is inconsistent for %s" % name)
+                if status == "verified":
+                    _validate_discovery_verified_archive(
+                        name,
+                        archive,
+                        str(row.get("archive_sha256") or ""),
+                    )
             elif archive:
                 raise RunnerError("discovery state has an archive path without an object name")
+            elif status == "verified":
+                raise RunnerError("verified discovery state has no intact archive")
     return state
 
 
@@ -874,6 +905,7 @@ def register_verification_tool(
                 raise ValueError("object_name is required for branch discovery")
             if not selected_branch:
                 raise ValueError("branch must be one of the supplied mathematical branches")
+            selected_name = _ensure_discovery_name_unattempted(selected_name)
         else:
             selected_name = object_job.name
             selected_branch = object_job.branch
@@ -1251,6 +1283,17 @@ def _attempted_object_names() -> List[str]:
             if name:
                 names.setdefault(name.casefold(), name)
     return sorted(names.values(), key=str.casefold)
+
+
+def _ensure_discovery_name_unattempted(name: str) -> str:
+    """Fail closed when a new discovery reuses an exact prior attempted name."""
+    candidate = str(name or "").strip()
+    if not candidate:
+        raise RunnerError("discovery object name is empty")
+    attempted = {item.casefold() for item in _attempted_object_names()}
+    if candidate.casefold() in attempted:
+        raise RunnerError("discovery object was already attempted: %s" % candidate)
+    return candidate
 
 
 def _discovery_project_slug(job: JobFile, index: int) -> str:
@@ -1743,6 +1786,7 @@ def run_discovery(
             name = candidate_map.get(name.casefold(), "")
             if not name:
                 raise RunnerError("verified object is outside the supplied candidate pool")
+        name = _ensure_discovery_name_unattempted(name)
         row["name"] = name
         row["branch"] = branch
         row["source_urls"] = []
@@ -1981,6 +2025,8 @@ def run_discovery(
                         for candidate_name, _source in job.concept_references
                     }
                     name = candidate_map.get(name.casefold(), "")
+                if name:
+                    name = _ensure_discovery_name_unattempted(name)
                 branch_map = {branch.casefold(): branch for branch in job.branches}
                 branch = branch_map.get(str(control.get("branch") or "").strip().casefold(), "")
                 if name and branch:
