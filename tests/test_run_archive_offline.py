@@ -258,6 +258,57 @@ class OfflineRunnerRegressionTests(unittest.TestCase):
         with self.assertRaisesRegex(self.runner.RunnerError, "material is not UTF-8 text"):
             self.runner.load_job(queue_path)
 
+    def test_concept_references_allow_optional_sources(self):
+        reference_path = self.temp_root / "references.json"
+        reference_path.write_text(
+            json.dumps(
+                [
+                    {"name": "Yoneda lemma", "source": "https://example.org/yoneda"},
+                    {"name": "Optimal transport"},
+                ],
+                ensure_ascii=False,
+            ),
+            encoding="utf-8",
+        )
+
+        references = self.runner.load_concept_references(reference_path)
+
+        self.assertEqual(
+            references,
+            (
+                ("Yoneda lemma", "https://example.org/yoneda"),
+                ("Optimal transport", ""),
+            ),
+        )
+
+    def test_candidate_pool_is_part_of_discovery_run_identity(self):
+        reference_path = self.temp_root / "references.json"
+        reference_path.write_text(
+            json.dumps([{"name": "Yoneda lemma"}]),
+            encoding="utf-8",
+        )
+        plain = self.runner.build_discovery_job(
+            ["Category Theory"],
+            target_archives=1,
+            run_name="plain",
+        )
+        candidate = self.runner.build_discovery_job(
+            ["Category Theory"],
+            target_archives=1,
+            run_name="candidate",
+            concept_reference_path=reference_path,
+        )
+
+        legacy_identity = json.dumps(
+            {"branches": ["Category Theory"], "target_archives": 1},
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        self.assertEqual(plain.sha256, self.runner._sha256_text(legacy_identity))
+        self.assertNotEqual(candidate.sha256, plain.sha256)
+        self.assertEqual(candidate.concept_references, (("Yoneda lemma", ""),))
+
     def test_state_rejects_input_mutation_after_run_started(self):
         queue_path = self._write_queue(self._minimal_payload())
         first_job = self.runner.load_job(queue_path)
