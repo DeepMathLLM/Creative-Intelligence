@@ -76,6 +76,26 @@ Run the deterministic controller tests:
 py -3.10 -m unittest discover -s tests -p "test_*.py" -v
 ```
 
+The repository also runs the Stage 2 controller regression suite in GitHub
+Actions. The Windows lane exercises the complete controller suite, while a
+Linux lane independently pins the crash/recovery checkpoint contract.
+
+## Crash-safe research checkpoints
+
+`state.json` separates accepted research progress from an in-flight Codex
+attempt. The nested `checkpoint` object is the durable record of the last
+accepted structured research result; `attempt` records temporary lifecycle
+state for the next turn.
+
+Starting a Codex turn therefore does not advance the committed turn number or
+overwrite the accepted summary. A failed or interrupted attempt is recorded
+separately. On restart, the controller can reuse an already observed Codex
+session while retrying the still-uncommitted turn. Only a valid structured
+research result advances `checkpoint`.
+
+This is a controller-level recovery guarantee, not exactly-once execution of a
+Codex turn or of external side effects performed by tools inside that turn.
+
 ## Configuration and research contract
 
 `config.toml` contains invocation-only Codex overrides. `agent.py` translates
